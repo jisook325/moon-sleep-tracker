@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moon Sleep Tracker | 달빛 수면 트래커</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=Noto+Sans+KR:wght@300;400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body class="dark-theme">
+    <div id="app">
+        <!-- 상단 헤더: 현재 시간 및 사용자 선택 -->
+        <header class="app-header">
+            <div class="header-main">
+                <div class="time-display" id="currentTime">00:00</div>
+                <div class="user-selector">
+                    <select id="userSelect">
+                        <!-- 사용자 목록은 JS에서 동적 생성 -->
+                    </select>
+                </div>
+            </div>
+            <h1 class="app-title">Moon Sleep</h1>
+        </header>
+
+        <!-- 메인 콘텐츠 영역 -->
+        <main class="content-area">
+            <!-- 탭 1: 기록 화면 -->
+            <section id="recordSection" class="tab-content active">
+                <div class="status-card glass">
+                    <div id="statusIcon" class="status-icon idle">🌙</div>
+                    <div id="statusText" class="status-text">오늘 수면을 기록해보세요</div>
+                </div>
+
+                <div class="control-panel">
+                    <div class="time-edit-group">
+                        <button class="btn-time-adj" id="minus10">-10m</button>
+                        <div class="target-time-display" id="targetTime">00:00</div>
+                        <button class="btn-time-adj" id="plus10">+10m</button>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button id="sleepBtn" class="btn btn-primary">취침 시작</button>
+                        <button id="wakeBtn" class="btn btn-secondary disabled" disabled>기상 완료</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 탭 2: 대시보드 화면 -->
+            <section id="dashboardSection" class="tab-content">
+                <div class="stats-grid">
+                    <div class="stat-card glass">
+                        <span class="stat-label">평균 수면</span>
+                        <span class="stat-value" id="avgSleepTime">0h 0m</span>
+                    </div>
+                    <div class="stat-card glass">
+                        <span class="stat-label">평균 취침</span>
+                        <span class="stat-value" id="avgSleepStart">00:00</span>
+                    </div>
+                </div>
+                
+                <div class="chart-container glass">
+                    <h3>최근 7일 수면 시간</h3>
+                    <canvas id="sleepChart"></canvas>
+                </div>
+
+                <div class="chart-container glass">
+                    <h3>수면 퀄리티 트렌드</h3>
+                    <canvas id="qualityChart"></canvas>
+                </div>
+
+                <div class="recent-memos glass">
+                    <h3>최근 메모</h3>
+                    <ul id="memoList"></ul>
+                </div>
+            </section>
+
+            <!-- 탭 3: 설정 화면 -->
+            <section id="settingsSection" class="tab-content">
+                <div class="settings-group glass">
+                    <h3>Supabase 설정</h3>
+                    <div class="input-field">
+                        <label>Supabase Project URL</label>
+                        <input type="text" id="supabaseUrlInput" placeholder="https://xxxx.supabase.co">
+                    </div>
+                    <div class="input-field">
+                        <label>Supabase Anon Key</label>
+                        <input type="password" id="supabaseKeyInput" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+                    </div>
+                </div>
+
+                <div class="settings-group glass">
+                    <h3>사용자 관리</h3>
+                    <div class="input-field">
+                        <label>사용자 목록 (공백으로 구분)</label>
+                        <input type="text" id="userListInput" placeholder="지숙 엄마 아빠">
+                    </div>
+                    <div class="input-field">
+                        <label>목표 수면 시간 (시간)</label>
+                        <input type="number" id="targetSleepInput" value="7" min="1" max="12">
+                    </div>
+                </div>
+                
+                <div class="settings-actions" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <button id="saveSettingsBtn" class="btn btn-secondary">설정 저장</button>
+                    <button id="testConnBtn" class="btn btn-primary" style="background:#059669; box-shadow:0 4px 15px rgba(5,150,105,0.4);">연결 테스트</button>
+                </div>
+            </section>
+        </main>
+
+        <!-- 하단 네비게이션 바 -->
+        <nav class="bottom-nav">
+            <button class="nav-item active" data-tab="recordSection">
+                <span class="icon">🌙</span>
+                <span class="label">기록</span>
+            </button>
+            <button class="nav-item" data-tab="dashboardSection">
+                <span class="icon">📊</span>
+                <span class="label">통계</span>
+            </button>
+            <button class="nav-item" data-tab="settingsSection">
+                <span class="icon">⚙️</span>
+                <span class="label">설정</span>
+            </button>
+        </nav>
+
+        <!-- 수면 퀄리티 입력 모달 -->
+        <div id="qualityModal" class="modal">
+            <div class="modal-content glass">
+                <h2>오늘 밤은 어떠셨나요? 😴</h2>
+                
+                <div class="rating-group">
+                    <label>수면 별점 (0.5 단위)</label>
+                    <input type="range" id="ratingSlider" min="0" max="5" step="0.5" value="4">
+                    <div class="rating-value"><span id="ratingDisplay">4.0</span> / 5.0</div>
+                </div>
+
+                <div class="memo-group">
+                    <label>짧은 메모 (선택 사항)</label>
+                    <textarea id="memoInput" rows="2" placeholder="예: 커피를 마셔서 늦게 잠듦, 매우 개운함"></textarea>
+                </div>
+
+                <div class="modal-actions">
+                    <button id="skipSaveBtn" class="btn btn-text">건너뛰기</button>
+                    <button id="confirmSaveBtn" class="btn btn-primary">저장하기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="/main.js"></script>
+</body>
+</html>
