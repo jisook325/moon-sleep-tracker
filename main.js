@@ -1,7 +1,7 @@
 import Chart from 'chart.js/auto';
-import { createClient } from '@supabase/supabase-js';
+import { SleepService } from './sleepService.js';
 
-// --- State Management & Persistence ---
+// --- State Management ---
 const state = {
     isSleeping: false,
     sleepStartTime: null,
@@ -16,7 +16,7 @@ const state = {
     }
 };
 
-let supabase = null;
+let sleepService = null;
 
 // --- DOM Elements ---
 const navItems = document.querySelectorAll('.nav-item');
@@ -43,7 +43,7 @@ const targetSleepInput = document.getElementById('targetSleepInput');
 function init() {
     loadSettings();
     loadSession(); 
-    initSupabase();
+    initService();
     syncSettingsToUI();
     startClock();
     setupEventListeners();
@@ -51,10 +51,10 @@ function init() {
     updateUIState();
 }
 
-function initSupabase() {
+function initService() {
     if (state.settings.supabaseUrl && state.settings.supabaseKey) {
-        supabase = createClient(state.settings.supabaseUrl, state.settings.supabaseKey);
-        console.log("Supabase Client Initialized");
+        sleepService = new SleepService(state.settings.supabaseUrl, state.settings.supabaseKey);
+        console.log("Sleep Service Initialized");
     }
 }
 
@@ -98,7 +98,7 @@ function saveSession() {
     }));
 }
 
-// --- Core Logic ---
+// --- UI Logic ---
 function startClock() {
     setInterval(() => {
         const now = new Date();
@@ -215,20 +215,16 @@ function setupEventListeners() {
         state.settings.userList = userListInput.value.trim().split(/\s+/);
         state.settings.targetSleep = parseInt(targetSleepInput.value);
         saveSettings();
-        initSupabase(); // 설정 변경 시 클라이언트 재기동
+        initService();
         renderUserSelect();
         alert('설정이 저장되었습니다!');
     });
 
     document.getElementById('testConnBtn').addEventListener('click', async () => {
-        if (!supabase) return alert('설정에서 Supabase 정보를 먼저 입력해주세요.');
-        
+        if (!sleepService) return alert('설정에서 Supabase 정보를 먼저 입력해주세요.');
         try {
-            const { error } = await supabase.from('sleep_records').insert([
-                { user_name: 'Test', sleep_time: new Date(), memo: 'Connection Test' }
-            ]);
-            if (error) throw error;
-            alert('연결 테스트 성공! Supabase Table Editor에서 확인하세요.');
+            await sleepService.testConnection();
+            alert('연결 테스트 성공!');
         } catch (err) {
             alert('오류: ' + err.message);
         }
@@ -236,28 +232,21 @@ function setupEventListeners() {
 }
 
 async function saveRecord(withDetails) {
-    if (!supabase) return alert('설정에서 Supabase 정보를 먼저 입력해주세요.');
+    if (!sleepService) return alert('설정에서 Supabase 정보를 먼저 입력해주세요.');
 
     const wakeTime = new Date(state.targetTime);
-    const durationMs = wakeTime - state.sleepStartTime;
-    const durationMin = Math.round(durationMs / (1000 * 60));
     
     try {
-        const { error } = await supabase.from('sleep_records').insert([
-            { 
-                user_name: state.currentUser,
-                sleep_time: state.sleepStartTime.toISOString(),
-                wake_time: wakeTime.toISOString(),
-                duration_minutes: durationMin,
-                rating: withDetails ? parseFloat(ratingSlider.value) : 0,
-                memo: withDetails ? memoInput.value.trim() : ""
-            }
-        ]);
-
-        if (error) throw error;
+        await sleepService.saveRecord({
+            userName: state.currentUser,
+            sleepTime: state.sleepStartTime,
+            wakeTime: wakeTime,
+            rating: withDetails ? parseFloat(ratingSlider.value) : 0,
+            memo: withDetails ? memoInput.value.trim() : ""
+        });
         alert('데이터 저장 성공!');
     } catch (err) {
-        console.error("Supabase Error:", err);
+        console.error("Save Error:", err);
         alert('저장 실패: ' + err.message);
     }
 
@@ -277,20 +266,11 @@ let sleepChart = null;
 let qualityChart = null;
 
 async function loadDashboardData() {
-    if (!supabase) return;
+    if (!sleepService) return;
 
     try {
-        const { data, error } = await supabase
-            .from('sleep_records')
-            .select('*')
-            .eq('user_name', state.currentUser)
-            .order('created_at', { ascending: false })
-            .limit(14);
-        
-        if (error) throw error;
-        
+        const data = await sleepService.getRecords(state.currentUser);
         if (data && data.length > 0) {
-            // 차트 표시를 위해 과거 순서로 뒤집기
             const sortedData = [...data].reverse();
             renderCharts(sortedData);
             renderMemos(sortedData);
@@ -302,7 +282,7 @@ async function loadDashboardData() {
 }
 
 function renderCharts(data) {
-    const labels = data.map(d => new Date(d.created_at).toLocaleDateString('ko-KR', {month:'short', day:'numeric'}));
+    const labels = data.map(d => new Date(d.sleep_time).toLocaleDateString('ko-KR', {month:'short', day:'numeric'}));
     const durations = data.map(d => (d.duration_minutes || 0) / 60);
     const ratings = data.map(d => d.rating || 0);
 
@@ -360,7 +340,7 @@ function renderMemos(data) {
     list.innerHTML = data
         .filter(d => d.memo)
         .reverse()
-        .map(d => `<li><small>${new Date(d.created_at).toLocaleDateString()}</small> • ${d.memo}</li>`)
+        .map(d => `<li><small>${new Date(d.sleep_time).toLocaleDateString()}</small> • ${d.memo}</li>`)
         .join('');
 }
 
